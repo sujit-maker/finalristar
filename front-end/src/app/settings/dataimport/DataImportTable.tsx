@@ -40,7 +40,7 @@ const portCSVHeaders = [
   "Parent Port"
 ];
 
-// Empty CSV template headers for containers based on Excel template format
+// Update the containerCSVHeaders array to match your Excel headers
 const containerCSVHeaders = [
   "ID",
   "Container Number",
@@ -51,21 +51,22 @@ const containerCSVHeaders = [
   "Capacity",
   "Manufacturer",
   "Build Year",
-  "Gross Weight",
-  "Tare Weight",
+  "Gross Wt",
+  "Tare Wt",
   "Ownership",
   "LEASE REF",
   "LEASE RENTAL",
   "OWNERSHIP",
   "On-Hire Date",
   "Onhire Location",
-  "On Hire DEPOT ID",
+  "On Hire DEPOT",
+  "OWNER",
   "Off-Hire Date",
   "Lease Rent Per Day",
   "remarks",
-  "Inspection Date",
+  "Last Inspection Date", // Changed from "Inspection Date" to match Excel
   "Inspection Type",
-  "Next Due Date",
+  "Next Inspection Due", // Changed from "Next Due Date" to match Excel
   "Certificate",
   "Report Date",
   "Report Document"
@@ -136,6 +137,10 @@ const DataImportTable = () => {
   const [importStats, setImportStats] = useState({ success: 0, failed: 0 });
   const [errorMessages, setErrorMessages] = useState<string[]>([]);
   const [isDownloading, setIsDownloading] = useState(false);
+
+  // Set your actual fallback IDs here:
+  const DEFAULT_DEPOT_ID = 1; // Replace with your actual 'Unknown Depot' ID
+  const DEFAULT_PORT_ID = 1;  // Replace with your actual 'Unknown Port' ID
 
   // Handle downloading empty template CSV with just headers
   const handleDownloadEmptyTemplate = () => {
@@ -298,21 +303,23 @@ const DataImportTable = () => {
       "Capacity": "containerCapacity",
       "Manufacturer": "manufacturer",
       "Build Year": "buildYear",
-      "Gross Weight": "grossWeight",
-      "Tare Weight": "tareWeight",
+      "Gross Wt": "grossWt", // Match Excel header
+      "Tare Wt": "tareWt", // Match Excel header
+      "Gross Weight": "grossWt", // Keep for backward compatibility
+      "Tare Weight": "tareWt", // Keep for backward compatibility
       "Ownership": "ownership",
       "LEASE REF": "leasingRefNo",
       "LEASE RENTAL": "leaseRentPerDay",
       "OWNERSHIP": "ownership",
       "On-Hire Date": "onHireDate",
       "Onhire Location": "onHireLocation",
-      "On Hire DEPOT ID": "onHireDepotId",
+      "On Hire DEPOT": "onHireDepotId",
       "Off-Hire Date": "offHireDate",
       "Lease Rent Per Day": "leaseRentPerDay",
       "remarks": "remarks",
-      "Inspection Date": "inspectionDate",
+      "Last Inspection Date": "inspectionDate", // Map "Last Inspection Date" to "inspectionDate"
       "Inspection Type": "inspectionType",
-      "Next Due Date": "nextDueDate",
+      "Next Inspection Due": "nextDueDate", // Map "Next Inspection Due" to "nextDueDate"
       "Certificate": "certificate",
       "Report Date": "reportDate",
       "Report Document": "reportDocument"
@@ -324,7 +331,7 @@ const DataImportTable = () => {
   // Validate a single row of container CSV data
   const validateContainerRow = (row: Record<string, string>): string | null => {
     // Required fields for container import based on Excel template headers
-    const requiredFields = ["Container Number", "Container Category", "Container Type", "Container Class"];
+    const requiredFields = ["Container Number", "Container Category", "Container Type", "Container Class", "Ownership"];
     
     for (const field of requiredFields) {
       if (!row[field] || row[field].trim() === "") {
@@ -344,52 +351,23 @@ const DataImportTable = () => {
       return `Invalid Container Category: ${category}. Must be "Tank", "Dry", or "Refrigerated"`;
     }
     
-    // Validate ownership type if provided - case sensitive as in the system
-    if (row["Ownership"] && row["Ownership"].trim() !== "") {
-      const ownership = row["Ownership"].trim();
-      if (ownership !== "OWN" && ownership !== "LEASED") {
-        return `Invalid Ownership: ${ownership}. Must be either "Own" or "Leased"`;
-      }
-      
-      // All fields are now optional for both Own and Leased containers
-      // No required validation for lease fields - they are all optional
+    // Validate ownership type - REQUIRED field
+    const ownership = row["Ownership"]?.trim().toUpperCase();
+    if (!ownership) {
+      return `Ownership is required for container ${containerNumber}`;
+    }
+    if (ownership !== "OWN" && ownership !== "OWNED" && ownership !== "LEASED" && ownership !== "LEASE") {
+      return `Invalid Ownership: ${row["Ownership"]}. Must be either "OWN", "OWNED", "LEASED", or "LEASE" (case insensitive)`;
     }
     
-    // Validate capacity is a number if provided (optional)
-    if (row["Capacity"] && row["Capacity"].trim() !== "") {
-      const capacity = parseFloat(row["Capacity"].trim().replace(/,/g, ''));
-      if (isNaN(capacity)) {
-        return `Invalid Capacity: ${row["Capacity"]}. Must be a number.`;
+    // Additional validation for LEASED containers
+    if (ownership === "LEASED" || ownership === "LEASE") {
+      if (!row["OWNER"] || row["OWNER"].trim() === "") {
+        return `OWNER field is required for LEASED container ${containerNumber}`;
       }
     }
     
-    // Validate weights are numbers if provided (optional)
-    if (row["Gross Weight"] && row["Gross Weight"].trim() !== "") {
-      const grossWeight = parseFloat(row["Gross Weight"].trim().replace(/,/g, ''));
-      if (isNaN(grossWeight)) {
-        return `Invalid Gross Weight: ${row["Gross Weight"]}. Must be a number.`;
-      }
-    }
-    
-    if (row["Tare Weight"] && row["Tare Weight"].trim() !== "") {
-      const tareWeight = parseFloat(row["Tare Weight"].trim().replace(/,/g, ''));
-      if (isNaN(tareWeight)) {
-        return `Invalid Tare Weight: ${row["Tare Weight"]}. Must be a number.`;
-      }
-    }
-    
-    // Validate dates if provided (all optional now)
-    const dateFields = ["On-Hire Date", "Off-Hire Date", "Inspection Date", "Next Due Date", "Report Date"];
-    for (const field of dateFields) {
-      if (row[field] && row[field].trim() !== "") {
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$|^\d{2}\/\d{2}\/\d{4}$|^\d{2}-\d{2}-\d{4}$/; 
-        if (!dateRegex.test(row[field].trim())) {
-          return `Invalid date format for ${field}: ${row[field]}. Use formats like YYYY-MM-DD, MM/DD/YYYY, DD-MM-YYYY, DD-MMM-YY (18-Sep-24), or DD-MMM-YYYY.`;
-        }
-      }
-    }
-    
-    return null; // No validation errors
+    return null;
   };
 
   // Process and upload the CSV file
@@ -459,7 +437,7 @@ const DataImportTable = () => {
     
     try {
       // Fetch all countries to map country names to IDs
-      const countriesResponse = await axios.get("http://128.199.19.28:8000/country");
+      const countriesResponse = await axios.get("http://localhost:8000/country");
       const countries = countriesResponse.data;
       
       // Process each row
@@ -522,7 +500,7 @@ const DataImportTable = () => {
           }
           
           // Submit to API
-          await axios.post("http://128.199.19.28:8000/addressbook", payload);
+          await axios.post("http://localhost:8000/addressbook", payload);
           successCount.value++;
         } catch (error: any) {
           failedCount.value++;
@@ -572,11 +550,11 @@ const DataImportTable = () => {
     
     try {
       // Fetch all countries to map country names to IDs
-      const countriesResponse = await axios.get("http://128.199.19.28:8000/country");
+      const countriesResponse = await axios.get("http://localhost:8000/country");
       const countries = countriesResponse.data;
       
       // Fetch all ports to map parent port names to IDs
-      const portsResponse = await axios.get("http://128.199.19.28:8000/ports");
+      const portsResponse = await axios.get("http://localhost:8000/ports");
       const ports = portsResponse.data;
       
       // Process each row
@@ -652,7 +630,7 @@ const DataImportTable = () => {
           delete payload.parentPortName; // Remove this field even if not used
           
           // Submit to API
-          await axios.post("http://128.199.19.28:8000/ports", payload);
+          await axios.post("http://localhost:8000/ports", payload);
           successCount.value++;
         } catch (error: any) {
           failedCount.value++;
@@ -685,6 +663,18 @@ const DataImportTable = () => {
 
   // Process container import data
   const processContainerImport = async (data: Record<string, string>[]) => {
+    // Filter out empty rows first
+    const nonEmptyData = data.filter(row => {
+      // Check if row has at least container number
+      return row["Container Number"] && row["Container Number"].trim() !== "";
+    });
+
+    if (nonEmptyData.length === 0) {
+      setImportStatus("error");
+      setErrorMessages(["No valid container data found in the file"]);
+      return;
+    }
+
     // Check if the CSV has the required headers based on Excel template headers
     const requiredHeaders = ["Container Number", "Container Category", "Container Type", "Container Class"];
     const headers = Object.keys(data[0]);
@@ -699,263 +689,242 @@ const DataImportTable = () => {
     const successCount = { value: 0 };
     const failedCount = { value: 0 };
     const errors: string[] = [];
+    const skippedRows: string[] = [];
     
     try {
       // Fetch all address book entries to map names to IDs
-      const addressBookResponse = await axios.get("http://128.199.19.28:8000/addressbook");
+      const addressBookResponse = await axios.get("http://localhost:8000/addressbook");
       const addressBookEntries = addressBookResponse.data;
       
       // Fetch all ports to map port names to IDs
-      const portsResponse = await axios.get("http://128.199.19.28:8000/ports");
+      const portsResponse = await axios.get("http://localhost:8000/ports");
       const portsEntries = portsResponse.data;
       
+      console.log(`Processing ${nonEmptyData.length} containers...`);
+      
       // Process each row
-      for (let i = 0; i < data.length; i++) {
-        const row = data[i];
+      for (let i = 0; i < nonEmptyData.length; i++) {
+        const row = nonEmptyData[i];
+        const rowNumber = i + 2; // +2 because Excel starts at row 1 and has headers
+        
         try {
+          // Skip if container number is empty
+          if (!row["Container Number"] || row["Container Number"].trim() === "") {
+            skippedRows.push(`Row ${rowNumber}: Empty container number`);
+            continue;
+          }
+          
           // Validate the row
           const validationError = validateContainerRow(row);
           if (validationError) {
             throw new Error(validationError);
           }
           
-          // Step 1: Create a payload for the inventory API using Excel template field names
+          // Determine ownership type first - MAKE IT REQUIRED
+          const ownershipValue = row["Ownership"]?.trim() || "";
+          const ownershipUpper = ownershipValue.toUpperCase();
+          
+          // Fail fast if ownership is not provided
+          if (!ownershipValue) {
+            throw new Error(`Ownership is required`);
+          }
+          
+          console.log(`Processing container ${row["Container Number"]} (Row ${rowNumber}) - Ownership: "${ownershipValue}"`);
+          
+          // Step 1: Create the base inventory payload
           const inventoryPayload: Record<string, any> = {
-            containerCategory: row["Container Category"]?.trim() || "Tank", // Use CSV value or default to Tank
-            status: "Active", // Default status
+            containerCategory: row["Container Category"]?.trim() || "Tank",
+            status: "Active",
             containerNumber: row["Container Number"].trim(),
-            containerType: row["Container Type"].trim(),
-            containerSize: row["Container Size"]?.trim() || "20TK", // Default size if not provided
-            containerClass: row["Container Class"].trim(),
+            containerType: row["Container Type"]?.trim() || "",
+            containerSize: row["Container Size"]?.trim() || "20TK",
+            containerClass: row["Container Class"]?.trim() || "",
             containerCapacity: row["Capacity"]?.trim() || "",
-            capacityUnit: "MTN", // Default capacity unit
+            capacityUnit: "L",
             manufacturer: row["Manufacturer"]?.trim() || "",
             buildYear: row["Build Year"]?.trim() || "",
             grossWeight: (row["Gross Wt"] && String(row["Gross Wt"]).trim() !== "") ? String(row["Gross Wt"]).trim() : "",
             tareWeight: (row["Tare Wt"] && String(row["Tare Wt"]).trim() !== "") ? String(row["Tare Wt"]).trim() : "",
-            InitialSurveyDate: "", // Not in Excel template, leave empty
-            ownership: row["Ownership"]?.trim() || ""
+            InitialSurveyDate: "",
+            leasingInfo: [],
+            periodicTankCertificates: [],
+            onHireReport: []
           };
           
-          
-          // Step 2: Submit to inventory API and get the ID
-          const inventoryResponse = await axios.post("http://128.199.19.28:8000/inventory", inventoryPayload);
-          const inventoryId = inventoryResponse.data.id;
-          
-          // Debug: Log the response to see if gross/tare weights were saved
-          console.log(`Inventory created with ID ${inventoryId}. Response data:`, inventoryResponse.data);
-          
-          // For "Own" containers, create a leasing info record with ownership type "Own"
-          if (row["Ownership"] && row["Ownership"].trim() === "Own") {
-      
-            // Find depot ID from address book - be more flexible with matching
-            let depotId = null;
-            if (row["On Hire DEPOT ID"] && row["On Hire DEPOT ID"].trim() !== "") {
-              // If it's a number, use it directly as ID
-              if (!isNaN(Number(row["On Hire DEPOT ID"].trim()))) {
-                depotId = Number(row["On Hire DEPOT ID"].trim());
-                console.log(`Using depot ID: ${depotId}`);
-              } else {
-                // Otherwise try to find by name
-                const depot = addressBookEntries.find(
-                  (a: any) => a.companyName.toLowerCase().trim() === row["On Hire DEPOT ID"].toLowerCase().trim()
-                );
-                if (depot) {
-                  depotId = depot.id;
-                  console.log(`Found depot by name: ${depot.companyName} (ID: ${depot.id})`);
-                } else {
-                  console.warn(`Depot not found: ${row["On Hire DEPOT ID"]}`);
-                }
-              }
-            }
-            
-            // If depot not found by name, try to find any depot terminal
-            if (!depotId) {
-              const depotEntries = addressBookEntries.filter((a: any) => 
-                a.businessType && (
-                  a.businessType.toLowerCase().includes("depot") || 
-                  a.businessType.toLowerCase().includes("terminal") ||
-                  a.businessType.toLowerCase().includes("deport") // Handle typo in business type
-                )
-              );
-              
-              if (depotEntries.length > 0) {
-                depotId = depotEntries[0].id;
-                console.log(`Using fallback depot: ${depotEntries[0].companyName} (ID: ${depotId})`);
-              }
-            }
-            
-            // Find port ID based on "Onhire Location"
+          // Handle ownership-specific fields - NO DEFAULT VALUES
+          if (ownershipUpper === "OWN" || ownershipUpper === "OWNED") {
+            // Find portId by port name or code
             let portId = null;
-            if (row["Onhire Location"] && row["Onhire Location"].trim() !== "") {
-              const port = portsEntries.find(
-                (p: any) => p.portName.toLowerCase().trim() === row["Onhire Location"].toLowerCase().trim()
+            if (row["Onhire Location"]) {
+              const foundPort = portsEntries.find((p: any) =>
+                p.portName?.trim().toLowerCase() === row["Onhire Location"].trim().toLowerCase() ||
+                p.portCode?.trim().toLowerCase() === row["Onhire Location"].trim().toLowerCase()
               );
-              if (port) {
-                portId = port.id;
-                console.log(`Found port by name: ${port.portName} (ID: ${port.id})`);
-              } else {
-                console.warn(`Port not found: ${row["Onhire Location"]}`);
-              }
+              portId = foundPort ? foundPort.id : null;
             }
-            
-            // If port not found by name, use the first available port as fallback
-            if (!portId && portsEntries.length > 0) {
-              portId = portsEntries[0].id;
-              console.log(`Using fallback port: ${portsEntries[0].portName} (ID: ${portId})`);
+
+            // Find depotId by company name or ID
+            let depotId = null;
+            if (row["On Hire DEPOT"]) {
+              const foundDepot = addressBookEntries.find((d: any) =>
+                d.companyName?.trim().toLowerCase() === row["On Hire DEPOT"].trim().toLowerCase() ||
+                String(d.id) === row["On Hire DEPOT"].trim()
+              );
+              depotId = foundDepot ? foundDepot.id : null;
             }
-            
-            // Ensure we have both depot and port (use fallbacks if necessary)
+
+            // Use fallback IDs if not found
+            if (!portId) {
+              errors.push(`Row ${rowNumber} (${row["Container Number"]}): Port not found for Onhire Location: ${row["Onhire Location"]}. Using default port ID ${DEFAULT_PORT_ID}.`);
+              portId = DEFAULT_PORT_ID;
+            }
             if (!depotId) {
-              console.warn(`No depot found for Own container ${row["Container Number"]}. Skipping leasing info creation.`);
-              // Skip leasing info creation if no depot found
-            } else if (!portId) {
-              console.warn(`No port found for Own container ${row["Container Number"]}. Skipping leasing info creation.`);
-              // Skip leasing info creation if no port found
-            } else {
-            const ownLeasingPayload = {
-              inventoryId: inventoryId,
+              errors.push(`Row ${rowNumber} (${row["Container Number"]}): Depot not found for On Hire DEPOT: ${row["On Hire DEPOT"]}. Using default depot ID ${DEFAULT_DEPOT_ID}.`);
+              depotId = DEFAULT_DEPOT_ID;
+            }
+
+            inventoryPayload.portId = portId;
+            inventoryPayload.onHireDepotaddressbookId = depotId;
+            inventoryPayload.ownership = "Own";
+
+            // Always create leasingInfo for Own, using fallback IDs if needed
+            inventoryPayload.leasingInfo.push({
               ownershipType: "Own",
-              leasingRefNo: `OWN-${row["Container Number"].trim()}`, // Generate reference for Own containers
-              leaseRentPerDay: "0", // No rent for owned containers
-              leasoraddressbookId: depotId, // Use depot as leasor for "Own" containers
+              leasingRefNo: `OWN-${row["Container Number"]}`,
+              leasoraddressbookId: depotId,
               onHireDepotaddressbookId: depotId,
               portId: portId,
-              onHireDate: row["On-Hire Date"] && row["On-Hire Date"].trim() !== "" ? formatDate(row["On-Hire Date"].trim()) : null, // Make optional
-              offHireDate: row["Off-Hire Date"]?.trim() ? formatDate(row["Off-Hire Date"].trim()) : null,
-              remarks: row["remarks"]?.trim() || ""
-            };
-              
-              console.log(`Creating leasing info for Own container:`, ownLeasingPayload);
-              
-              // Submit to leasing info API
-              await axios.post("http://128.199.19.28:8000/leasinginfo", ownLeasingPayload);
-              console.log(`Successfully created leasing info for Own container ${row["Container Number"]}`);
-            } // Close the else block for Own container leasing creation
-          } // Close the if block for Own ownership
-          
-          // If leased, create leasing info record using LEASE RENTAL as lease rent amount
-          if (row["Ownership"] && row["Ownership"].trim() === "LEASED") {
-            console.log(`Processing Leased container: ${row["Container Number"]}`);
-            
-            // Check if we have minimum required data for leasing info
-            const hasOnHireDate = row["On-Hire Date"] && row["On-Hire Date"].trim() !== "";
-            
-            if (!hasOnHireDate) {
-              console.warn(`Skipping leasing info for Leased container ${row["Container Number"]} - no on-hire date provided`);
-              // Continue without creating leasing info - just create the inventory record
-            } else {
-              // Find port ID for leasing info (required field)
-              let portId = null;
-              if (row["Onhire Location"] && row["Onhire Location"].trim() !== "") {
-                const port = portsEntries.find(
-                  (p: any) => p.portName.toLowerCase().trim() === row["Onhire Location"].toLowerCase().trim()
-                );
-                portId = port?.id;
-              }
-              
-              if (!portId) {
-                console.warn(`Port not found for location: ${row["Onhire Location"]}. Using default port.`);
-                portId = portsEntries.length > 0 ? portsEntries[0].id : 1; // Use first available port or default
-              }
-              
-              // Find depot ID from address book (required field)
-              let depotId = null;
-              if (row["On Hire DEPOT ID"] && row["On Hire DEPOT ID"].trim() !== "") {
-                // If it's a number, use it directly as ID
-                if (!isNaN(Number(row["On Hire DEPOT ID"].trim()))) {
-                  depotId = Number(row["On Hire DEPOT ID"].trim());
-                } else {
-                  // Otherwise try to find by company name
-                  const depot = addressBookEntries.find(
-                    (a: any) => a.companyName.toLowerCase().trim() === row["On Hire DEPOT ID"].toLowerCase().trim()
-                  );
-                  if (depot) {
-                    depotId = depot.id;
-                  }
-                }
-              }
-              
-              // If no depot found, use the first available depot as fallback (required field)
-              if (!depotId && addressBookEntries.length > 0) {
-                depotId = addressBookEntries[0].id;
-                console.warn(`No depot specified for Leased container ${row["Container Number"]}. Using fallback depot: ${addressBookEntries[0].companyName}`);
-              }
-              
-              // For leasor, we'll use the same depot as fallback since we don't have leasor identification in the CSV
-              const leasorId = depotId; // Use depot as leasor fallback since it's required
-              
-              if (depotId && leasorId && portId) {
-                const leasedLeasingPayload = {
-                  inventoryId: inventoryId,
-                  ownershipType: "LEASED",
-                  leasingRefNo: row["LEASE REF"]?.trim() || `LEASE-${row["Container Number"].trim()}`, // Use LEASE REF as reference
-                  leasoraddressbookId: leasorId, // Required - use depot as fallback
-                  onHireDepotaddressbookId: depotId, // Required
-                  portId: portId, // Required field
-                  onHireDate: formatDate(row["On-Hire Date"].trim()), // Required - we already checked it exists
-                  offHireDate: row["Off-Hire Date"]?.trim() ? formatDate(row["Off-Hire Date"].trim()) : null,
-                  leaseRentPerDay: row["LEASE RENTAL"]?.trim() || "0", // Use LEASE RENTAL as the lease rent per day
-                  remarks: row["remarks"]?.trim() || `Imported leased container - LEASE REF: ${row["LEASE REF"]?.trim() || "N/A"}, LEASE RENTAL: ${row["LEASE RENTAL"]?.trim() || "N/A"}`
-                };
-                
-                console.log(`Creating leasing info for Leased container:`, leasedLeasingPayload);
-                
-                try {
-                  // Submit to leasing info API
-                  await axios.post("http://128.199.19.28:8000/leasinginfo", leasedLeasingPayload);
-                  console.log(`Successfully created leasing info for Leased container ${row["Container Number"]}`);
-                  
-                  // Create on-hire report
-                  try {
-                    const onHireReportPayload = {
-                      inventoryId: inventoryId,
-                      reportDate: formatDate(row["On-Hire Date"].trim())
-                    };
-                    
-                    // Submit to on-hire report API
-                    await axios.post("http://128.199.19.28:8000/onhirereport", onHireReportPayload);
-                  } catch (reportError: any) {
-                    console.warn(`On-hire report creation failed for row ${i+1}: ${reportError.message}`);
-                    // We don't fail the whole import for this, just log a warning
-                  }
-                } catch (leasingError: any) {
-                  console.warn(`Leasing info creation failed for Leased container ${row["Container Number"]}: ${leasingError.message}`);
-                  // We don't fail the whole import for this, just log a warning
-                }
+              onHireDate: new Date().toISOString(),
+              offHireDate: null,
+              leaseRentPerDay: "",
+              remarks: ""
+            });
+          } else if (ownershipUpper === "LEASED" || ownershipUpper === "LEASE") {
+            // For LEASED containers, keep strict validation
+            let leasorId = null;
+            let portId = null;
+            let depotId = null;
+            if (row["OWNER"] && row["OWNER"].trim() !== "") {
+              const ownerValue = row["OWNER"].trim();
+              const leasor = addressBookEntries.find(
+                (a: any) => a.companyName.toLowerCase().trim() === ownerValue.toLowerCase().trim() ||
+                           a.id.toString() === ownerValue
+              );
+              if (leasor) {
+                leasorId = leasor.id;
               } else {
-                console.warn(`Skipping leasing info for Leased container ${row["Container Number"]} - missing required data (depot: ${depotId}, leasor: ${leasorId}, port: ${portId})`);
+                errors.push(`Row ${rowNumber} (${row["Container Number"]}): Leasor not found for OWNER: ${row["OWNER"]}`);
               }
+            }
+            if (row["Onhire Location"] && row["Onhire Location"].trim() !== "") {
+              const onHireLocationValue = row["Onhire Location"].trim();
+              let port = portsEntries.find((p: any) => p.id === Number(onHireLocationValue));
+              if (!port) {
+                port = portsEntries.find(
+                  (p: any) => p.portName.toLowerCase().trim() === onHireLocationValue.toLowerCase().trim()
+                );
+              }
+              if (port) {
+                portId = port.id;
+              } else {
+                errors.push(`Row ${rowNumber} (${row["Container Number"]}): Port not found for Onhire Location: ${row["Onhire Location"]}`);
+              }
+            }
+            if (row["On Hire DEPOT"] && row["On Hire DEPOT"].trim() !== "") {
+              const depotValue = row["On Hire DEPOT"].trim();
+              let depot = addressBookEntries.find((a: any) => a.id === Number(depotValue));
+              if (!depot) {
+                depot = addressBookEntries.find(
+                  (a: any) => a.companyName.toLowerCase().trim() === depotValue.toLowerCase().trim()
+                );
+              }
+              if (depot) {
+                depotId = depot.id;
+              } else {
+                errors.push(`Row ${rowNumber} (${row["Container Number"]}): Depot not found for On Hire DEPOT: ${row["On Hire DEPOT"]}`);
+              }
+            }
+            if (!leasorId || !portId || !depotId) {
+              errors.push(`Row ${rowNumber} (${row["Container Number"]}): Skipped LEASED record due to missing references.`);
+              continue;
+            }
+            // Create leasing info record for LEASED containers
+            let onHireDate = new Date().toISOString();
+            let offHireDate = null;
+            if (row["On-Hire Date"] && row["On-Hire Date"].trim() !== "") {
+              try {
+                onHireDate = new Date(row["On-Hire Date"]).toISOString();
+              } catch (e) {}
+            }
+            if (row["Off-Hire Date"] && row["Off-Hire Date"].trim() !== "") {
+              try {
+                offHireDate = new Date(row["Off-Hire Date"]).toISOString();
+              } catch (e) {}
+            }
+            inventoryPayload.leasingInfo.push({
+              ownershipType: "Leased",
+              leasingRefNo: row["LEASE REF"] || `LEASE-${row["Container Number"]}`,
+              leasoraddressbookId: leasorId,
+              onHireDepotaddressbookId: depotId,
+              portId: portId,
+              onHireDate: onHireDate,
+              offHireDate: offHireDate,
+              leaseRentPerDay: row["Lease Rent Per Day"] || row["LEASE RENTAL"] || "0",
+              remarks: row["remarks"] || ""
+            });
+          }
+          
+          // Add periodic tank certificates if provided
+          if (row["Last Inspection Date"] && row["Inspection Type"] && row["Last Inspection Date"].trim() !== "") {
+            try {
+              const inspectionDate = new Date(row["Last Inspection Date"]).toISOString();
+              const nextDueDate = row["Next Inspection Due"] && row["Next Inspection Due"].trim() !== "" 
+                ? new Date(row["Next Inspection Due"]).toISOString() 
+                : new Date().toISOString();
+                
+              inventoryPayload.periodicTankCertificates.push({
+                inspectionDate: inspectionDate,
+                inspectionType: row["Inspection Type"],
+                nextDueDate: nextDueDate,
+                certificate: row["Certificate"] || ""
+              });
+            } catch (e) {
+              console.warn(`Invalid date format for inspection dates in row ${rowNumber}`);
             }
           }
           
-          // If inspection date and type are provided, create tank certificate using Excel headers
-          if (row["Inspection Date"] && row["Inspection Date"].trim() !== "") {
-            const certificatePayload = {
-              inventoryId: inventoryId,
-              inspectionDate: formatDate(row["Inspection Date"].trim()),
-              inspectionType: row["Inspection Type"]?.trim() || "Periodic 2.5Yr", // Use Inspection Type from Excel
-              nextDueDate: row["Next Due Date"]?.trim() ? formatDate(row["Next Due Date"].trim()) : ""
-            };
-            
-            // Submit to tank certificate API
-            await axios.post("http://128.199.19.28:8000/tankcertificate", certificatePayload);
+          // Add on-hire report if provided
+          if (row["Report Date"] && row["Report Date"].trim() !== "") {
+            try {
+              inventoryPayload.onHireReport.push({
+                reportDate: new Date(row["Report Date"]).toISOString(),
+                reportDocument: row["Report Document"] || ""
+              });
+            } catch (e) {
+              console.warn(`Invalid date format for report date in row ${rowNumber}`);
+            }
           }
-          
-          successCount.value++;
+
+          // Step 2: Submit the complete inventory payload
+          try {
+            const response = await axios.post("http://localhost:8000/inventory", inventoryPayload);
+            console.log(`✓ Successfully created container ${row["Container Number"]} (Row ${rowNumber})`);
+            successCount.value++;
+          } catch (error: any) {
+            failedCount.value++;
+            const errorMessage = error.response?.data?.message || error.message;
+            errors.push(`Row ${rowNumber} (${row["Container Number"]}): ${errorMessage}`);
+          }
         } catch (error: any) {
           failedCount.value++;
-          let errorMessage = error.response?.data?.message || error.message || "Unknown error";
-          
-          // Make error messages more user-friendly
-          if (errorMessage.includes("duplicate key") && errorMessage.includes("containerNumber")) {
-            errorMessage = `Container number ${row["Container Number"]} already exists in the system`;
-          } else if (errorMessage.includes("foreign key constraint")) {
-            errorMessage = `Referenced entity not found. Please check your data references.`;
-          }
-          
-          errors.push(`Row ${i+1}: ${errorMessage}`);
+          const errorMessage = error.message || "Unknown error";
+          errors.push(`Row ${rowNumber} (${row["Container Number"] || "Unknown"}): ${errorMessage}`);
         }
+      }
+      
+      // Add skipped rows to errors if any
+      if (skippedRows.length > 0) {
+        errors.push(...skippedRows);
       }
       
       // Update statistics
@@ -965,14 +934,21 @@ const DataImportTable = () => {
       });
       setErrorMessages(errors);
       
+      console.log(`Import completed: ${successCount.value} success, ${failedCount.value} failed`);
+      
+      if (errors.length > 0) {
+        console.error("IMPORT ERRORS:", errors);
+        setErrorMessages(errors);
+      }
+      
       if (errors.length > 0 && successCount.value === 0) {
         setImportStatus("error");
       } else if (errors.length > 0) {
         setImportStatus("success"); // Partial success
-        toast.success(`${successCount.value} containers imported with ${errors.length} errors`);
+        toast.success(`${successCount.value} containers imported with ${failedCount.value} errors`);
       } else {
         setImportStatus("success");
-        toast.success(`${successCount.value} containers imported successfully`);
+        toast.success(`All ${successCount.value} containers imported successfully!`);
       }
     } catch (error: any) {
       setImportStatus("error");
@@ -980,545 +956,312 @@ const DataImportTable = () => {
     }
   };
 
-  // Helper function to format dates consistently for API
-  const formatDate = (dateStr: string): string => {
-    if (!dateStr) return "";
-    
-    // Try to parse various date formats
-    let date: Date | null = null;
-    
-    // Try MM/DD/YYYY format
-    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
-      const [month, day, year] = dateStr.split('/');
-      date = new Date(`${year}-${month}-${day}`);
-    } 
-    // Try YYYY-MM-DD format
-    else if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      date = new Date(dateStr);
-    }
-    // Try DD-MM-YYYY format
-    else if (/^\d{2}-\d{2}-\d{4}$/.test(dateStr)) {
-      const [day, month, year] = dateStr.split('-');
-      date = new Date(`${year}-${month}-${day}`);
-    }
-    // Try dates with periods DD.MM.YYYY
-    else if (/^\d{2}\.\d{2}\.\d{4}$/.test(dateStr)) {
-      const [day, month, year] = dateStr.split('.');
-      date = new Date(`${year}-${month}-${day}`);
-    }
-    // Try DD-MMM-YY format (like 18-Sep-24)
-    else if (/^\d{1,2}-[A-Za-z]{3}-\d{2}$/.test(dateStr)) {
-      const [day, monthStr, year] = dateStr.split('-');
-      const monthMap: Record<string, string> = {
-        'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
-        'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
-      };
-      const month = monthMap[monthStr];
-      if (month) {
-        const fullYear = parseInt(year) + 2000; // Convert 24 to 2024
-        date = new Date(`${fullYear}-${month}-${day.padStart(2, '0')}`);
-      }
-    }
-    // Try DD-MMM-YYYY format (like 18-Sep-2024)
-    else if (/^\d{1,2}-[A-Za-z]{3}-\d{4}$/.test(dateStr)) {
-      const [day, monthStr, year] = dateStr.split('-');
-      const monthMap: Record<string, string> = {
-        'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
-        'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
-      };
-      const month = monthMap[monthStr];
-      if (month) {
-        date = new Date(`${year}-${month}-${day.padStart(2, '0')}`);
-      }
-    }
-    
-    if (date && !isNaN(date.getTime())) {
-      return date.toISOString().split('T')[0]; // Return YYYY-MM-DD
-    }
-    
-    // Last resort - try to let JavaScript parse it
-    try {
-      const fallbackDate = new Date(dateStr);
-      if (!isNaN(fallbackDate.getTime())) {
-        return fallbackDate.toISOString().split('T')[0];
-      }
-    } catch (e) {
-      // Failed to parse
-    }
-    
-    return dateStr; // Return original if parsing fails
-  };
-
-  // Reset the import process
-  const handleReset = () => {
-    setSelectedFile(null);
-    setImportStatus("idle");
-    setImportStats({ success: 0, failed: 0 });
-    setErrorMessages([]);
-  };
-
   return (
-    <div className="container mx-auto py-6">
-      <Toaster position="top-center" toastOptions={{
-        success: { duration: 3000, style: { background: '#10B981', color: 'white' } },
-        error: { duration: 4000, style: { background: '#EF4444', color: 'white' } },
-      }} />
-      <h1 className="text-2xl font-bold mb-6">Data Import</h1>
-      
-      <Tabs defaultValue="companies" onValueChange={(value) => setSelectedCategory(value as ImportCategory)}>
-        <TabsList className="mb-4">
-          <TabsTrigger value="companies">Companies</TabsTrigger>
-          <TabsTrigger value="ports">Ports</TabsTrigger>
-          <TabsTrigger value="containers">Containers</TabsTrigger>
-        </TabsList>
-        
-        {/* Companies Import */}
-        <TabsContent value="companies">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex justify-between items-center">
-                <span>Import Companies</span>
-                <Button 
-                  variant="outline" 
-                  onClick={handleDownloadEmptyTemplate}
-                  disabled={isDownloading}
-                  className="flex items-center gap-2 bg-transparent border-gray-300 text-black hover:bg-gray-100"
-                >
-                  {isDownloading ? (
-                    <>
-                      <div className="animate-spin h-4 w-4 border-2 border-t-transparent border-gray-600 rounded-full mr-2"></div>
-                      Downloading...
-                    </>
-                  ) : (
-                    <>
-                      <FileSpreadsheet className="h-4 w-4" />
-                      Download CSV Template
-                    </>
-                  )}
-                </Button>
-              </CardTitle>
-            </CardHeader>
-            
-            <CardContent>
-              {importStatus === "idle" && (
-                <>
-                  <div className="mb-6">
-                    <div className="bg-gray-50 border border-gray-200 rounded-md p-4">
-                      <h3 className="font-medium text-gray-800 mb-2">How to import companies:</h3>
-                      <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1">
-                        <li>Download the CSV template</li>
-                        <li>Fill it with your company data (Company Name & Country required)</li>
-                        <li>Upload the completed file</li>
-                        <li>Data will be automatically added to the Address Book</li>
-                      </ol>
-                    </div>
-                  </div>
-                  
-                  <FileUploadArea 
-                    onFileChange={setSelectedFile}
-                    selectedFile={selectedFile}
-                    isUploading={importStatus === ("processing" as ImportStatus)}
-                  />
-                  
-                  {selectedFile && (
-                    <div className="mt-4 flex justify-end">
-                      <Button 
-                        onClick={handleProcessCSV}
-                        className="flex items-center gap-2 bg-black text-white hover:bg-gray-800"
-                      >
-                        <Upload className="h-4 w-4" />
-                        Upload and Process
-                      </Button>
-                    </div>
-                  )}
-                </>
-              )}
-              
-              {importStatus === "processing" && (
-                <div className="py-8 text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-700 mx-auto"></div>
-                  <p className="mt-4 text-gray-600">Processing your data...</p>
-                </div>
-              )}
-              
-              {importStatus === "success" && (
-                <div className="py-4">
-                  <div className="text-center">
-                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-100 mb-4">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    
-                    <h3 className="text-lg font-semibold mb-2">Import Successful</h3>
-                    <p className="text-gray-600">
-                      {importStats.success} companies have been successfully imported.
-                      {importStats.failed > 0 && ` (${importStats.failed} failed)`}
+    <div className="p-4 sm:p-6 lg:p-8">
+      <Toaster />
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold">
+            Data Import - {selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1)}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex-1 min-w-0">
+              <Tabs defaultValue="companies" className="h-full">
+                <TabsList>
+                  <TabsTrigger
+                    value="companies"
+                    onClick={() => setSelectedCategory("companies")}
+                    className={`py-2 px-4 text-sm font-medium rounded-l-md transition-all flex items-center justify-center ${
+                      selectedCategory === "companies"
+                        ? "bg-blue-600 text-white shadow-md"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    Companies
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="ports"
+                    onClick={() => setSelectedCategory("ports")}
+                    className={`py-2 px-4 text-sm font-medium transition-all flex items-center justify-center ${
+                      selectedCategory === "ports"
+                        ? "bg-blue-600 text-white shadow-md"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    Ports
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="containers"
+                    onClick={() => setSelectedCategory("containers")}
+                    className={`py-2 px-4 text-sm font-medium rounded-r-md transition-all flex items-center justify-center ${
+                      selectedCategory === "containers"
+                        ? "bg-blue-600 text-white shadow-md"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    Containers
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="companies" className="pt-4">
+                  <div>
+                    <p className="text-sm text-gray-500">
+                      Import your company data using our CSV template. Ensure all
+                      fields are correctly filled before uploading.
                     </p>
-                  </div>
-                  
-                  {importStats.failed > 0 && (
-                    <div className="mt-6 max-w-md mx-auto">
-                      <h4 className="font-medium text-red-600">The following errors occurred:</h4>
-                      <ul className="list-disc pl-5 mt-2">
-                        {errorMessages.slice(0, 3).map((error, index) => (
-                          <li key={index} className="text-red-600 text-sm mb-1">{error}</li>
-                        ))}
-                        {errorMessages.length > 3 && (
-                          <li className="text-red-600 text-sm">...and {errorMessages.length - 3} more errors</li>
-                        )}
-                      </ul>
-                    </div>
-                  )}
-                  
-                  <div className="mt-6 flex justify-center space-x-4">
-                    <Button onClick={handleReset} className="bg-black text-white hover:bg-gray-800">
-                      Import Another File
-                    </Button>
-                    <Button 
-                      variant="outline"
-                      onClick={() => window.location.href = "/addressbook"}
-                      className="border-gray-300 text-gray-700 hover:bg-gray-50"
-                    >
-                      View Companies
-                    </Button>
-                  </div>
-                </div>
-              )}
-              
-              {importStatus === "error" && (
-                <div className="py-4">
-                  <div className="flex flex-col items-center">
-                    <div className="text-center">
-                      <AlertCircle className="h-10 w-10 mx-auto text-red-500" />
-                      <h3 className="text-lg font-semibold mt-2 text-red-600">Import Failed</h3>
-                    </div>
-                    
-                    {importStats.success > 0 && (
-                      <p className="mb-4 mt-2">Partially imported: {importStats.success} companies were successfully imported.</p>
-                    )}
-                    
-                    <div className="w-full mt-4 max-w-md">
-                      <h4 className="font-semibold text-red-800 mb-2">Errors:</h4>
-                      <ul className="list-disc pl-5">
-                        {errorMessages.map((error, index) => (
-                          <li key={index} className="text-red-700 mb-2">{error}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    
-                    <div className="mt-6">
-                      <Button onClick={handleReset} className="bg-black text-white hover:bg-gray-800">Try Again</Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        {/* Ports Import */}
-        <TabsContent value="ports">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex justify-between items-center">
-                <span>Import Ports</span>
-                <Button 
-                  variant="outline" 
-                  onClick={handleDownloadEmptyTemplate}
-                  disabled={isDownloading}
-                  className="flex items-center gap-2 bg-transparent border-gray-300 text-black hover:bg-gray-100"
-                >
-                  {isDownloading ? (
-                    <>
-                      <div className="animate-spin h-4 w-4 border-2 border-t-transparent border-gray-600 rounded-full mr-2"></div>
-                      Downloading...
-                    </>
-                  ) : (
-                    <>
-                      <FileSpreadsheet className="h-4 w-4" />
-                      Download CSV Template
-                    </>
-                  )}
-                </Button>
-              </CardTitle>
-            </CardHeader>
-            
-            <CardContent>
-              {importStatus === "idle" && (
-                <>
-                  <div className="mb-6">
-                    <div className="bg-gray-50 border border-gray-200 rounded-md p-4">
-                      <h3 className="font-medium text-gray-800 mb-2">How to import ports:</h3>
-                      <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1">
-                        <li>Download the CSV template</li>
-                        <li>Fill it with your port data (PORT_Code, PORT_Name, PORT_LONG, Country -Full & Port Type required)</li>
-                        <li>For ICD port types, a Parent Port must be specified</li>
-                        <li>Upload the completed file</li>
-                        <li>Data will be automatically added to the Ports database</li>
-                      </ol>
-                    </div>
-                  </div>
-                  
-                  <FileUploadArea 
-                    onFileChange={setSelectedFile}
-                    selectedFile={selectedFile}
-                    isUploading={importStatus === ("processing" as ImportStatus)}
-                  />
-                  
-                  {selectedFile && (
-                    <div className="mt-4 flex justify-end">
-                      <Button 
-                        onClick={handleProcessCSV}
-                        className="flex items-center gap-2 bg-black text-white hover:bg-gray-800"
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-4">
+                      <Button
+                        onClick={handleDownloadEmptyTemplate}
+                        disabled={isDownloading}
+                        className="w-full sm:w-auto"
                       >
-                        <Upload className="h-4 w-4" />
-                        Upload and Process
-                      </Button>
-                    </div>
-                  )}
-                </>
-              )}
-              
-              {importStatus === "processing" && (
-                <div className="py-8 text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-700 mx-auto"></div>
-                  <p className="mt-4 text-gray-600">Processing your data...</p>
-                </div>
-              )}
-              
-              {importStatus === "success" && (
-                <div className="py-4">
-                  <div className="text-center">
-                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-100 mb-4">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    
-                    <h3 className="text-lg font-semibold mb-2">Import Successful</h3>
-                    <p className="text-gray-600">
-                      {importStats.success} ports have been successfully imported.
-                      {importStats.failed > 0 && ` (${importStats.failed} failed)`}
-                    </p>
-                  </div>
-                  
-                  {importStats.failed > 0 && (
-                    <div className="mt-6 max-w-md mx-auto">
-                      <h4 className="font-medium text-red-600">The following errors occurred:</h4>
-                      <ul className="list-disc pl-5 mt-2">
-                        {errorMessages.slice(0, 3).map((error, index) => (
-                          <li key={index} className="text-red-600 text-sm mb-1">{error}</li>
-                        ))}
-                        {errorMessages.length > 3 && (
-                          <li className="text-red-600 text-sm">...and {errorMessages.length - 3} more errors</li>
+                        {isDownloading ? (
+                          <span className="animate-spin">Downloading...</span>
+                        ) : (
+                          <>
+                            <Upload className="mr-2 h-5 w-5" />
+                            Download Empty Template
+                          </>
                         )}
-                      </ul>
+                      </Button>
+                      <FileUploadArea
+                        onFileChange={setSelectedFile}
+                        selectedFile={selectedFile}
+                        isUploading={importStatus === "processing"}
+                      />
                     </div>
-                  )}
-                  
-                  <div className="mt-6 flex justify-center space-x-4">
-                    <Button onClick={handleReset} className="bg-black text-white hover:bg-gray-800">
-                      Import Another File
-                    </Button>
-                    <Button 
-                      variant="outline"
-                      onClick={() => window.location.href = "/port-location/ports"}
-                      className="border-gray-300 text-gray-700 hover:bg-gray-50"
-                    >
-                      View Ports
-                    </Button>
-                  </div>
-                </div>
-              )}
-              
-              {importStatus === "error" && (
-                <div className="py-4">
-                  <div className="flex flex-col items-center">
-                    <div className="text-center">
-                      <AlertCircle className="h-10 w-10 mx-auto text-red-500" />
-                      <h3 className="text-lg font-semibold mt-2 text-red-600">Import Failed</h3>
-                    </div>
-                    
-                    {importStats.success > 0 && (
-                      <p className="mb-4 mt-2">Partially imported: {importStats.success} ports were successfully imported.</p>
+                    {importStatus === "processing" && (
+                      <div className="mt-4 text-center">
+                        <p className="text-sm text-gray-500">
+                          Processing your import. This may take a few minutes.
+                        </p>
+                        <div className="flex justify-center mt-2">
+                          <div className="animate-spin rounded-full h-3 w-3 border-t-2 border-b-2 border-blue-500"></div>
+                        </div>
+                      </div>
                     )}
-                    
-                    <div className="w-full mt-4 max-w-md">
-                      <h4 className="font-semibold text-red-800 mb-2">Errors:</h4>
-                      <ul className="list-disc pl-5">
-                        {errorMessages.map((error, index) => (
-                          <li key={index} className="text-red-700 mb-2">{error}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    
-                    <div className="mt-6">
-                      <Button onClick={handleReset} className="bg-black text-white hover:bg-gray-800">Try Again</Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        {/* Containers Import */}
-        <TabsContent value="containers">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex justify-between items-center">
-                <span>Import Containers</span>
-                <Button 
-                  variant="outline" 
-                  onClick={handleDownloadEmptyTemplate}
-                  disabled={isDownloading}
-                  className="flex items-center gap-2 bg-transparent border-gray-300 text-black hover:bg-gray-100"
-                >
-                  {isDownloading ? (
-                    <>
-                      <div className="animate-spin h-4 w-4 border-2 border-t-transparent border-gray-600 rounded-full mr-2"></div>
-                      Downloading...
-                    </>
-                  ) : (
-                    <>
-                      <FileSpreadsheet className="h-4 w-4" />
-                      Download CSV Template
-                    </>
-                  )}
-                </Button>
-              </CardTitle>
-            </CardHeader>
-            
-            <CardContent>
-              {importStatus === "idle" && (
-                <>
-                  <div className="mb-6">
-                    <div className="bg-gray-50 border border-gray-200 rounded-md p-4">
-                      <h3 className="font-medium text-gray-800 mb-2">How to import containers:</h3>
-                      <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1">
-                        <li>Download the CSV template</li>
-                        <li>Fill it with your container data (containerNumber, containerCategory, containerType, and containerClass required)</li>
-                        <li>For leased containers, OWNER, LEASE REF, and On-hire Date are also required</li>
-                        <li>Dates should be in YYYY-MM-DD or MM/DD/YYYY format</li>
-                        <li>Upload the completed file</li>
-                        <li>Data will be automatically added to the system (Inventory, Leasing Info, Tank Certificates, and On-Hire Reports)</li>
-                      </ol>
-                      <div className="mt-2 text-xs text-gray-500">
-                        <p>Note: The system will create related records based on your data:</p>
-                        <ul className="list-disc list-inside ml-2 mt-1">
-                          <li>Container details will be added to Inventory</li>
-                          <li>If leased, leasing information will be recorded</li> 
-                          <li>If inspection dates are provided, tank certificates will be created</li>
-                          <li>For leased containers, on-hire reports will also be generated</li>
+                    {importStatus === "success" && importStats.success > 0 && (
+                      <div className="mt-4 text-center">
+                        <p className="text-sm text-green-600">
+                          Successfully imported {importStats.success}{" "}
+                          {importStats.success === 1 ? "company" : "companies"}.
+                        </p>
+                      </div>
+                    )}
+                    {importStatus === "error" && errorMessages.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-sm text-red-600 font-semibold">
+                          Import Errors:
+                        </p>
+                        <ul className="list-disc list-inside text-sm text-red-500">
+                          {errorMessages.map((msg, idx) => (
+                            <li key={idx}>{msg}</li>
+                          ))}
                         </ul>
                       </div>
-                    </div>
-                  </div>
-                  
-                  <FileUploadArea 
-                    onFileChange={setSelectedFile}
-                    selectedFile={selectedFile}
-                    isUploading={importStatus === ("processing" as ImportStatus)}
-                  />
-                  
-                  {selectedFile && (
-                    <div className="mt-4 flex justify-end">
-                      <Button 
+                    )}
+                    {importStatus === "success" && importStats.failed > 0 && (
+                      <div className="mt-4 text-center">
+                        <p className="text-sm text-yellow-600">
+                          {importStats.failed}{" "}
+                          {importStats.failed === 1 ? "error" : "errors"} occurred
+                          during import. Check the list above for details.
+                        </p>
+                      </div>
+                    )}
+                    <div className="mt-6">
+                      <Button
                         onClick={handleProcessCSV}
-                        className="flex items-center gap-2 bg-black text-white hover:bg-gray-800"
+                        className="w-full sm:w-auto"
+                        disabled={importStatus === "processing" || !selectedFile}
                       >
-                        <Upload className="h-4 w-4" />
-                        Upload and Process
+                        {importStatus === "processing" ? (
+                          <span className="animate-spin">Processing...</span>
+                        ) : (
+                          <>
+                            <Upload className="mr-2 h-5 w-5" />
+                            Import Companies Data
+                          </>
+                        )}
                       </Button>
                     </div>
-                  )}
-                </>
-              )}
-              
-              {importStatus === "processing" && (
-                <div className="py-8 text-center">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-700 mx-auto"></div>
-                  <p className="mt-4 text-gray-600">Processing your data...</p>
-                </div>
-              )}
-              
-              {importStatus === "success" && (
-                <div className="py-4">
-                  <div className="text-center">
-                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-100 mb-4">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    
-                    <h3 className="text-lg font-semibold mb-2">Import Successful</h3>
-                    <p className="text-gray-600">
-                      {importStats.success} containers have been successfully imported.
-                      {importStats.failed > 0 && ` (${importStats.failed} failed)`}
+                  </div>
+                </TabsContent>
+                <TabsContent value="ports" className="pt-4">
+                  <div>
+                    <p className="text-sm text-gray-500">
+                      Import your port data using our CSV template. Ensure all fields
+                      are correctly filled before uploading.
                     </p>
-                  </div>
-                  
-                  {importStats.failed > 0 && (
-                    <div className="mt-6 max-w-md mx-auto">
-                      <h4 className="font-medium text-red-600">The following errors occurred:</h4>
-                      <ul className="list-disc pl-5 mt-2">
-                        {errorMessages.slice(0, 3).map((error, index) => (
-                          <li key={index} className="text-red-600 text-sm mb-1">{error}</li>
-                        ))}
-                        {errorMessages.length > 3 && (
-                          <li className="text-red-600 text-sm">...and {errorMessages.length - 3} more errors</li>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-4">
+                      <Button
+                        onClick={handleDownloadEmptyTemplate}
+                        disabled={isDownloading}
+                        className="w-full sm:w-auto"
+                      >
+                        {isDownloading ? (
+                          <span className="animate-spin">Downloading...</span>
+                        ) : (
+                          <>
+                            <Upload className="mr-2 h-5 w-5" />
+                            Download Empty Template
+                          </>
                         )}
-                      </ul>
+                      </Button>
+                      <FileUploadArea
+                        onFileChange={setSelectedFile}
+                        selectedFile={selectedFile}
+                        isUploading={importStatus === "processing"}
+                      />
                     </div>
-                  )}
-                  
-                  <div className="mt-6 flex justify-center space-x-4">
-                    <Button onClick={handleReset} className="bg-black text-white hover:bg-gray-800">
-                      Import Another File
-                    </Button>
-                    <Button 
-                      variant="outline"
-                      onClick={() => window.location.href = "/products-inventory/inventory"}
-                      className="border-gray-300 text-gray-700 hover:bg-gray-50"
-                    >
-                      View Containers
-                    </Button>
-                  </div>
-                </div>
-              )}
-              
-              {importStatus === "error" && (
-                <div className="py-4">
-                  <div className="flex flex-col items-center">
-                    <div className="text-center">
-                      <AlertCircle className="h-10 w-10 mx-auto text-red-500" />
-                      <h3 className="text-lg font-semibold mt-2 text-red-600">Import Failed</h3>
-                    </div>
-                    
-                    {importStats.success > 0 && (
-                      <p className="mb-4 mt-2">Partially imported: {importStats.success} containers were successfully imported.</p>
+                    {importStatus === "processing" && (
+                      <div className="mt-4 text-center">
+                        <p className="text-sm text-gray-500">
+                          Processing your import. This may take a few minutes.
+                        </p>
+                        <div className="flex justify-center mt-2">
+                          <div className="animate-spin rounded-full h-3 w-3 border-t-2 border-b-2 border-blue-500"></div>
+                        </div>
+                      </div>
                     )}
-                    
-                    <div className="w-full mt-4 max-w-md">
-                      <h4 className="font-semibold text-red-800 mb-2">Errors:</h4>
-                      <ul className="list-disc pl-5">
-                        {errorMessages.map((error, index) => (
-                          <li key={index} className="text-red-700 mb-2">{error}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    
+                    {importStatus === "success" && importStats.success > 0 && (
+                      <div className="mt-4 text-center">
+                        <p className="text-sm text-green-600">
+                          Successfully imported {importStats.success}{" "}
+                          {importStats.success === 1 ? "port" : "ports"}.
+                        </p>
+                      </div>
+                    )}
+                    {importStatus === "error" && errorMessages.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-sm text-red-600 font-semibold">
+                          Import Errors:
+                        </p>
+                        <ul className="list-disc list-inside text-sm text-red-500">
+                          {errorMessages.map((msg, idx) => (
+                            <li key={idx}>{msg}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {importStatus === "success" && importStats.failed > 0 && (
+                      <div className="mt-4 text-center">
+                        <p className="text-sm text-yellow-600">
+                          {importStats.failed}{" "}
+                          {importStats.failed === 1 ? "error" : "errors"} occurred
+                          during import. Check the list above for details.
+                        </p>
+                      </div>
+                    )}
                     <div className="mt-6">
-                      <Button onClick={handleReset} className="bg-black text-white hover:bg-gray-800">Try Again</Button>
+                      <Button
+                        onClick={handleProcessCSV}
+                        className="w-full sm:w-auto"
+                        disabled={importStatus === "processing" || !selectedFile}
+                      >
+                        {importStatus === "processing" ? (
+                          <span className="animate-spin">Processing...</span>
+                        ) : (
+                          <>
+                            <Upload className="mr-2 h-5 w-5" />
+                            Import Ports Data
+                          </>
+                        )}
+                      </Button>
                     </div>
                   </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                </TabsContent>
+                <TabsContent value="containers" className="pt-4">
+                  <div>
+                    <p className="text-sm text-gray-500">
+                      Import your container data using our CSV template. Ensure all
+                      fields are correctly filled before uploading.
+                    </p>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-4">
+                      <Button
+                        onClick={handleDownloadEmptyTemplate}
+                        disabled={isDownloading}
+                        className="w-full sm:w-auto"
+                      >
+                        {isDownloading ? (
+                          <span className="animate-spin">Downloading...</span>
+                        ) : (
+                          <>
+                            <Upload className="mr-2 h-5 w-5" />
+                            Download Empty Template
+                          </>
+                        )}
+                      </Button>
+                      <FileUploadArea
+                        onFileChange={setSelectedFile}
+                        selectedFile={selectedFile}
+                        isUploading={importStatus === "processing"}
+                      />
+                    </div>
+                    {importStatus === "processing" && (
+                      <div className="mt-4 text-center">
+                        <p className="text-sm text-gray-500">
+                          Processing your import. This may take a few minutes.
+                        </p>
+                        <div className="flex justify-center mt-2">
+                          <div className="animate-spin rounded-full h-3 w-3 border-t-2 border-b-2 border-blue-500"></div>
+                        </div>
+                      </div>
+                    )}
+                    {importStatus === "success" && importStats.success > 0 && (
+                      <div className="mt-4 text-center">
+                        <p className="text-sm text-green-600">
+                          Successfully imported {importStats.success}{" "}
+                          {importStats.success === 1 ? "container" : "containers"}.
+                        </p>
+                      </div>
+                    )}
+                    {importStatus === "error" && errorMessages.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-sm text-red-600 font-semibold">
+                          Import Errors:
+                          Import Errors:
+                        </p>
+                        <ul className="list-disc list-inside text-sm text-red-500">
+                          {errorMessages.map((msg, idx) => (
+                            <li key={idx}>{msg}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {importStatus === "success" && importStats.failed > 0 && (
+                      <div className="mt-4 text-center">
+                        <p className="text-sm text-yellow-600">
+                          {importStats.failed}{" "}
+                          {importStats.failed === 1 ? "error" : "errors"} occurred
+                          during import. Check the list above for details.
+                        </p>
+                      </div>
+                    )}
+                    <div className="mt-6">
+                      <Button
+                        onClick={handleProcessCSV}
+                        className="w-full sm:w-auto"
+                        disabled={importStatus === "processing" || !selectedFile}
+                      >
+                        {importStatus === "processing" ? (
+                          <span className="animate-spin">Processing...</span>
+                        ) : (
+                          <>
+                            <Upload className="mr-2 h-5 w-5" />
+                            Import Containers Data
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };

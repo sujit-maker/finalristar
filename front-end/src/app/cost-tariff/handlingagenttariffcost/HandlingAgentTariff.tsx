@@ -20,7 +20,7 @@ const AddTariffModal = ({
   const [currencies, setCurrencies] = useState<any[]>([]);
 
   useEffect(() => {
-    axios.get("http://128.199.19.28:8000/addressbook").then((res) => {
+    axios.get("http://localhost:8000/addressbook").then((res) => {
       // Change from exact match to includes match
       const filtered = res.data.filter(
         (agent: any) => agent.businessType && agent.businessType.includes("Handling Agent")
@@ -28,7 +28,7 @@ const AddTariffModal = ({
       setHandlingAgents(filtered);
     });
 
-    axios.get("http://128.199.19.28:8000/currency").then((res) => {
+    axios.get("http://localhost:8000/currency").then((res) => {
       setCurrencies(res.data);
     });
 
@@ -36,7 +36,7 @@ const AddTariffModal = ({
       setIsEditMode(true);
     } else {
       axios
-        .get("http://128.199.19.28:8000/handling-agent-tariff-cost/next-tariff-code")
+        .get("http://localhost:8000/handling-agent-tariff-cost/next-tariff-code")
         .then((res) =>
           setForm((prev: any) => ({
             ...prev,
@@ -86,11 +86,11 @@ const AddTariffModal = ({
     try {
       if (isEditMode) {
         await axios.patch(
-          `http://128.199.19.28:8000/handling-agent-tariff-cost/${form.id}`,
+          `http://localhost:8000/handling-agent-tariff-cost/${form.id}`,
           payload
         );
       } else {
-        await axios.post("http://128.199.19.28:8000/handling-agent-tariff-cost", payload);
+        await axios.post("http://localhost:8000/handling-agent-tariff-cost", payload);
       }
       handleSuccess();
       onClose();
@@ -128,8 +128,13 @@ const AddTariffModal = ({
             <Label className="text-white text-sm">Status</Label>
             <Input
               type="checkbox"
-              checked={form.status === true}
-              onChange={(e) => setForm({ ...form, status: e.target.checked })}
+              checked={form.status === "Active" || form.status === true || form.status === "true" || !form.status}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  status: e.target.checked ? "Active" : "Inactive",
+                })
+              }
               className="accent-blue-500 w-4 h-4 ml-2"
               id="status"
             />

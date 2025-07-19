@@ -28,7 +28,7 @@ const AddTariffModal = ({ onClose, formTitle, form, setForm }: any) => {
       setLoadingCode(true);
       
       axios
-        .get("http://128.199.19.28:8000/depot-cleaning-tariff-cost/next-tariff-code")
+        .get("http://localhost:8000/depot-cleaning-tariff-cost/next-tariff-code")
         .then((res) => {
           setForm((prevForm: any) => ({
             ...prevForm,
@@ -50,14 +50,14 @@ const AddTariffModal = ({ onClose, formTitle, form, setForm }: any) => {
 
   // 🟡 Fetch products
   useEffect(() => {
-    axios.get("http://128.199.19.28:8000/products").then((res) => {
+    axios.get("http://localhost:8000/products").then((res) => {
       setProducts(res.data);
     });
   }, []);
 
   // 🟡 Fetch depot terminals
  useEffect(() => {
-  axios.get("http://128.199.19.28:8000/addressbook").then((res) => {
+  axios.get("http://localhost:8000/addressbook").then((res) => {
     const filtered = res.data.filter(
       (a: any) =>
         a.businessType &&
@@ -71,36 +71,38 @@ const AddTariffModal = ({ onClose, formTitle, form, setForm }: any) => {
 
   // 🟡 Fetch currencies
   useEffect(() => {
-    axios.get("http://128.199.19.28:8000/currency").then((res) => {
+    axios.get("http://localhost:8000/currency").then((res) => {
       setCurrencies(res.data);
     });
   }, []);
 
-  // 🟡 Set service ports based on selected depot
+  // 🟡 Set service ports based on selected depot (works for both add and edit)
   useEffect(() => {
-    if (!depots.length || !form.addressBookId) return;
+    if (!depots.length || !form.addressBookId) {
+      setPorts([]);
+      return;
+    }
 
-    const selectedDepot = depots.find((d) => d.id === form.addressBookId);
+    // Accept both string and number for addressBookId
+    const depotId = typeof form.addressBookId === 'string' ? parseInt(form.addressBookId) : form.addressBookId;
+    const selectedDepot = depots.find((d) => d.id === depotId);
 
     if (selectedDepot) {
       const portList = selectedDepot.businessPorts || [];
       setPorts(portList);
 
+      // If editing, make sure the portId is valid
       const hasValidPort = portList.some((bp: any) => bp.port.id === form.portId);
-
-      // ✅ Only reset if current portId is NOT in the list
       if (!hasValidPort && form.portId !== 0) {
         setForm((prev: typeof form) => ({ ...prev, portId: 0 }));
       }
     } else {
       setPorts([]);
-
-      // ❗ Only reset if it's not already 0
       if (form.portId !== 0) {
         setForm((prev: typeof form) => ({ ...prev, portId: 0 }));
       }
     }
-  }, [form.addressBookId, depots]);
+  }, [form.addressBookId, depots, form.portId]);
 
   // When depotTerminalId changes, update portOptions
   useEffect(() => {
@@ -143,7 +145,7 @@ const AddTariffModal = ({ onClose, formTitle, form, setForm }: any) => {
     };
 
     try {
-      const url = "http://128.199.19.28:8000/depot-cleaning-tariff-cost";
+      const url = "http://localhost:8000/depot-cleaning-tariff-cost";
       let response;
       
       if (form.id) {

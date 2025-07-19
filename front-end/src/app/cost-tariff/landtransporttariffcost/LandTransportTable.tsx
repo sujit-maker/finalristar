@@ -46,7 +46,7 @@ const LandTransportTariff = () => {
 
   const fetchTariffs = async () => {
     try {
-      const res = await axios.get("http://128.199.19.28:8000/land-transport-tariff");
+      const res = await axios.get("http://localhost:8000/land-transport-tariff");
       setTariffs(res.data);
     } catch (err) {
       console.error("Error fetching tariffs:", err);
@@ -56,7 +56,7 @@ const LandTransportTariff = () => {
   const handleDelete = async (id: number) => {
     if (!confirm("Are you sure you want to delete this tariff?")) return;
     try {
-      await axios.delete(`http://128.199.19.28:8000/land-transport-tariff/${id}`);
+      await axios.delete(`http://localhost:8000/land-transport-tariff/${id}`);
       fetchTariffs();
     } catch (err) {
       console.error("Error deleting tariff:", err);
@@ -129,7 +129,7 @@ const LandTransportTariff = () => {
                   <TableCell>{row.amount}</TableCell>
                   <TableCell>{row.currency?.currencyName || "N/A"}</TableCell>
                   <TableCell>
-                    <StatusBadge status={row.status || "Inactive"} />
+                    <StatusBadge status={row.approvalStatus === "Approved" ? "Active" : "Inactive"} />
                   </TableCell>
                   <TableCell className="space-x-2">
                     <Button
