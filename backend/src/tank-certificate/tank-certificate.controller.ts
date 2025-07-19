@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Response } from 'express';
 
 import { TankCertificateService } from './tank-certificate.service';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -12,15 +13,15 @@ import { UpdateCertificateDto } from './dto/updateTankCertificate.dto';
 export class TankCertificateController {
     constructor(private readonly service: TankCertificateService) {}
 
-   @Post()
+   @Post('certificates/upload')
   @UseInterceptors(
-    FileInterceptor('certificate', {
+    FileInterceptor('file', {
       storage: diskStorage({
         destination: './uploads/certificates',
         filename: (req, file, cb) => {
           const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
           const ext = extname(file.originalname);
-          cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
+          cb(null, `${uniqueSuffix}${ext}`);
         },
       }),
       fileFilter: (req, file, cb) => {  
@@ -31,15 +32,31 @@ export class TankCertificateController {
       },
     }),
   )
-  async create(
-    @UploadedFile() file: Express.Multer.File,
-    @Body() dto: CertificateDto,
-  ) {
-    const filePath = file?.filename; // Save just the filename or full path
-    return this.service.create({
-      ...dto,
-      certificate: filePath,
-    });
+  async uploadCertificate(@UploadedFile() file: Express.Multer.File) {
+    return { fileName: file.filename };
+  }
+  
+  @Post('reports/upload')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: './uploads/reports',
+        filename: (req, file, cb) => {
+          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+          const ext = extname(file.originalname);
+          cb(null, `${uniqueSuffix}${ext}`);
+        },
+      }),
+      fileFilter: (req, file, cb) => {
+        if (file.mimetype !== 'application/pdf') {
+          return cb(new Error('Only PDF files are allowed!'), false);
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  async uploadReport(@UploadedFile() file: Express.Multer.File) {
+    return { fileName: file.filename };
   }
   
   @Get()

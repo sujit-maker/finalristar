@@ -74,7 +74,7 @@ uploadReport(@UploadedFile() file: Express.Multer.File, @Req() req: any) {
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
+  async remove(@Param('id', ParseIntPipe) id: number) {
     return this.service.remove(id);
   }
 }

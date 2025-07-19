@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CertificateDto } from './dto/createTankCertificate.dto';
@@ -34,29 +34,32 @@ export class TankCertificateService {
     return this.prisma.periodicTankCertificates.findUnique({ where: { id } });
   }
 
- update(id: number, data: UpdateCertificateDto & { certificate?: string }) {
-  const formattedData: any = {};
+  update(id: number, data: UpdateCertificateDto & { certificate?: string }) {
+    const formattedData: any = {};
 
-  if (data.inspectionDate) {
-    formattedData.inspectionDate = new Date(data.inspectionDate).toISOString();
+    if (data.inspectionDate) {
+      formattedData.inspectionDate = new Date(data.inspectionDate).toISOString();
+    }
+
+    if (data.nextDueDate) {
+      formattedData.nextDueDate = new Date(data.nextDueDate).toISOString();
+    }
+
+    if (data.certificate !== undefined) {
+      formattedData.certificate = data.certificate;
+    }
+
+    return this.prisma.periodicTankCertificates.update({
+      where: { id },
+      data: formattedData,
+    });
   }
 
-  if (data.nextDueDate) {
-    formattedData.nextDueDate = new Date(data.nextDueDate).toISOString();
-  }
-
-  if (data.certificate !== undefined) {
-    formattedData.certificate = data.certificate;
-  }
-
-  return this.prisma.periodicTankCertificates.update({
-    where: { id },
-    data: formattedData,
-  });
-}
-
-
-  remove(id: number) {
-    return this.prisma.periodicTankCertificates.delete({ where: { id } });
+  async remove(id: number) {
+    const cert = await this.prisma.periodicTankCertificates.findUnique({ where: { id } });
+    if (!cert) {
+      throw new NotFoundException(`Certificate with ID ${id} not found`);
+    }
+    return await this.prisma.periodicTankCertificates.delete({ where: { id } });
   }
 }
